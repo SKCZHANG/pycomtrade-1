@@ -259,10 +259,8 @@ class ComtradeRecord(object):
         '''
         output = {'samp': [], 'endsamp': []}
 
-        # For each sample rate
-        for i in range(self.cfg_data['nrates']):
-            output['samp'].append(data[0])     # Sample rates
-            output['endsamp'].append(data[1])  # Number of samples
+        output['samp'].append(data[0])   # Sample rates
+        output['endsamp'].append(data[1])   # Number of samples
         return output
 
     def dct_start(self, data):
@@ -323,10 +321,23 @@ class ComtradeRecord(object):
 
         @return timestamp vector.
         '''
-        t_interval = 1/float(self.cfg_data['samp'][-1])
-        n_samples = self.cfg_data['endsamp'][-1]
-        t_end = n_samples*t_interval
-        return np.linspace(0, t_end, n_samples)
+        # Initilization
+        t_start = 0
+        timestamps = []
+
+        # Constructing timestamps in multiple sample rates one by one
+        for nr in range(self.cfg_data['nrates']):
+            t_interval = 1/float(self.cfg_data['samp'][nr])
+            n_samples = self.cfg_data['endsamp'][nr]
+            t_end = t_start + (n_samples-1)*t_interval
+            tempstamps = np.linspace(t_start, t_end, n_samples)
+
+            # reset start timestamp for next processing
+            t_start = t_end + t_interval
+
+            # Concatenate timestamps in different sample rates
+            timestamps = np.append(timestamps, tempstamps)
+        return timestamps
 
     def get_analog_ids(self):
         '''
@@ -404,7 +415,7 @@ class ComtradeRecord(object):
         nA = self.cfg_data['#A']
         nD = self.cfg_data['#D']
         nH = int(np.ceil(nD/16.0))
-        nS = self.cfg_data['endsamp'][-1]
+        nS = sum(self.cfg_data['endsamp'])
 
         # Setting struct string
         str_struct = "ii{0}h".format(nA + nH)
@@ -439,7 +450,7 @@ class ComtradeRecord(object):
         nA = self.cfg_data['#A']
         nD = self.cfg_data['#D']
         nH = int(np.ceil(nD/16.0))
-        nS = self.cfg_data['endsamp'][-1]
+        nS = sum(self.cfg_data['endsamp'])
 
         # Setting struct string
         str_struct = "ii{0}h{1}H".format(nA, nH)
@@ -510,6 +521,28 @@ class ComtradeRecord(object):
                         out_dct = self.proc_line(line, arg)
                         self.cfg_data[arg].append(out_dct.copy())
 
+                # Reading One or Multiple Sample Rates 
+                elif arg in ['samples']:
+                    
+                    # Number of Sample Rates
+                    nsamrate = self.cfg_data['nrates']
+                    
+                    # Reading each sample rate
+                    for i in range(nsamrate):
+                        # Read line
+                        line = cfg_file.readline()
+                        if line.rstrip() == '':
+                            break
+
+                        # Process line
+                        out_dct = self.proc_line(line, arg)
+                        if i in range(1):
+                            self.cfg_data.update(out_dct)
+                            
+                        else:
+                            for k in list(out_dct.keys()):
+                                self.cfg_data[k].append(out_dct[k][0])
+                
                 else:
 
                     # Remaining channels
